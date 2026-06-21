@@ -84,5 +84,68 @@
 
     <div id="grid"></div>
   </main>
+
+  <script>
+  (() => {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const dropzone = $("dropzone"), fileInput = $("fileInput"), controls = $("controls");
+    const videoMeta = $("videoMeta"), status = $("status"), grid = $("grid");
+    const intervalEl = $("interval"), formatEl = $("format"), qualityEl = $("quality"),
+          maxFramesEl = $("maxFrames"), extractBtn = $("extractBtn"), progress = $("progress");
+
+    const video = document.createElement("video");
+    video.muted = true; video.playsInline = true; video.preload = "auto";
+
+    let currentURL = null;
+    let loaded = false;
+
+    function setStatus(msg) { status.textContent = msg; }
+
+    function loadFile(file) {
+      if (!file) return;
+      if (!file.type.startsWith("video/")) { setStatus("Not a video file: " + (file.type || "unknown")); return; }
+      if (currentURL) URL.revokeObjectURL(currentURL);
+      currentURL = URL.createObjectURL(file);   // <-- local only, no upload
+      loaded = false;
+      setStatus("Loading video…");
+      grid.innerHTML = "";
+      video.src = currentURL;
+    }
+
+    video.addEventListener("loadedmetadata", () => {
+      loaded = true;
+      controls.classList.remove("hidden");
+      dropzone.classList.add("hidden");
+      updateMeta();
+      setStatus("Ready.");
+    });
+    video.addEventListener("error", () => {
+      setStatus("Could not decode this video. The browser may not support its codec.");
+    });
+
+    function updateMeta() {
+      if (!loaded) return;
+      const interval = Math.max(0.04, parseFloat(intervalEl.value) || 1);
+      const est = Math.min(parseInt(maxFramesEl.value) || 1, Math.floor(video.duration / interval) + 1);
+      videoMeta.textContent =
+        `${video.videoWidth}×${video.videoHeight} · ${video.duration.toFixed(1)}s · ~${est} frames at ${interval}s interval`;
+    }
+    intervalEl.addEventListener("input", updateMeta);
+    maxFramesEl.addEventListener("input", updateMeta);
+
+    // --- input wiring ---
+    dropzone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => loadFile(e.target.files[0]));
+    ["dragenter", "dragover"].forEach((ev) =>
+      dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add("dragover"); }));
+    ["dragleave", "drop"].forEach((ev) =>
+      dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); }));
+    dropzone.addEventListener("drop", (e) => loadFile(e.dataTransfer.files[0]));
+
+    // extraction wired up in Task 3+
+    window.__fe = { video, get url(){ return currentURL; }, get loaded(){ return loaded; }, setStatus };
+  })();
+  </script>
 </body>
 </html>
