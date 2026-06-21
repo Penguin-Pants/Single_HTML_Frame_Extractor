@@ -143,8 +143,57 @@
       dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); }));
     dropzone.addEventListener("drop", (e) => loadFile(e.dataTransfer.files[0]));
 
+    // --- seek-and-capture (correctness-critical) ---
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    function seekTo(t) {
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return; done = true;
+          video.removeEventListener("seeked", onSeeked);
+          // wait two animation frames so the decoded frame is actually painted
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        };
+        const onSeeked = () => finish();
+        video.addEventListener("seeked", onSeeked);
+        // fallback if 'seeked' never fires (e.g. target == current time)
+        setTimeout(finish, 200);
+        video.currentTime = t;
+      });
+    }
+
+    async function captureFrameAt(t, mime, quality) {
+      await seekTo(t);
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;     // original resolution
+        canvas.height = video.videoHeight;
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((res) =>
+        canvas.toBlob(res, mime, mime === "image/png" ? undefined : quality));
+      if (!blob) throw new Error("Frame encoding failed (toBlob returned null)");
+      return blob;
+    }
+
+    // TEMP debug — removed in Task 4
+    const dbg = document.createElement("button");
+    dbg.textContent = "Capture one frame (debug)";
+    dbg.style.marginTop = "12px";
+    extractBtn.after(dbg);
+    dbg.addEventListener("click", async () => {
+      if (!loaded) return;
+      const t = Math.min(parseFloat(intervalEl.value) || 0, Math.max(0, video.duration - 0.05));
+      const blob = await captureFrameAt(t, formatEl.value, parseFloat(qualityEl.value));
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(blob);
+      grid.prepend(img);
+      setStatus(`Captured frame at ${t.toFixed(2)}s (${(blob.size/1024).toFixed(0)} KB)`);
+    });
+
     // extraction wired up in Task 3+
-    window.__fe = { video, get url(){ return currentURL; }, get loaded(){ return loaded; }, setStatus };
+    window.__fe = { video, get url(){ return currentURL; }, get loaded(){ return loaded; }, setStatus, captureFrameAt };
   })();
   </script>
 </body>
