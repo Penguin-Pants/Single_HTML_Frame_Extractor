@@ -99,6 +99,8 @@
 
     let currentURL = null;
     let loaded = false;
+    let running = false;
+    let cancelRequested = false;
 
     function setStatus(msg) { status.textContent = msg; }
 
@@ -177,23 +179,64 @@
       return blob;
     }
 
-    // TEMP debug — removed in Task 4
-    const dbg = document.createElement("button");
-    dbg.textContent = "Capture one frame (debug)";
-    dbg.style.marginTop = "12px";
-    extractBtn.after(dbg);
-    dbg.addEventListener("click", async () => {
+    // --- frame planning + extraction loop ---
+    function planTimestamps() {
+      const interval = Math.max(0.04, parseFloat(intervalEl.value) || 1);
+      const maxFrames = Math.max(1, parseInt(maxFramesEl.value) || 1);
+      const times = [];
+      for (let t = 0; t < video.duration && times.length < maxFrames; t += interval) {
+        times.push(Math.min(t, video.duration - 0.05));
+      }
+      return times;
+    }
+
+    function pad(n, width) { return String(n).padStart(width, "0"); }
+
+    async function extractAll() {
+      const times = planTimestamps();
+      const mime = formatEl.value, quality = parseFloat(qualityEl.value);
+      const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+      const width = String(times.length).length;
+      const frames = [];
+
+      cancelRequested = false;
+      grid.innerHTML = "";
+      progress.hidden = false; progress.value = 0; progress.max = times.length;
+
+      for (let i = 0; i < times.length; i++) {
+        if (cancelRequested) { setStatus(`Cancelled at ${i} / ${times.length}`); break; }
+        const blob = await captureFrameAt(times[i], mime, quality);
+        const name = `frame_${pad(i + 1, width)}_${times[i].toFixed(2)}s.${ext}`;
+        frames.push({ name, blob });
+
+        const img = document.createElement("img");
+        img.src = URL.createObjectURL(blob);
+        img.title = name;
+        grid.appendChild(img);
+
+        progress.value = i + 1;
+        setStatus(`Captured ${i + 1} / ${times.length}`);
+        // yield so the UI can paint
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      return frames;
+    }
+
+    extractBtn.addEventListener("click", async () => {
       if (!loaded) return;
-      const t = Math.min(parseFloat(intervalEl.value) || 0, Math.max(0, video.duration - 0.05));
-      const blob = await captureFrameAt(t, formatEl.value, parseFloat(qualityEl.value));
-      const img = document.createElement("img");
-      img.src = URL.createObjectURL(blob);
-      grid.prepend(img);
-      setStatus(`Captured frame at ${t.toFixed(2)}s (${(blob.size/1024).toFixed(0)} KB)`);
+      if (running) { cancelRequested = true; return; }
+      running = true; extractBtn.textContent = "Cancel";
+      try {
+        const frames = await extractAll();      // Task 5 will zip + download these
+        setStatus(`Done. ${frames.length} frames captured.`);
+      } catch (err) {
+        setStatus("Error: " + err.message);
+      } finally {
+        running = false; extractBtn.textContent = "Extract frames"; progress.hidden = true;
+      }
     });
 
-    // extraction wired up in Task 3+
-    window.__fe = { video, get url(){ return currentURL; }, get loaded(){ return loaded; }, setStatus, captureFrameAt };
+    window.__fe = { video, get url(){ return currentURL; }, get loaded(){ return loaded; }, setStatus, captureFrameAt, planTimestamps };
   })();
   </script>
 </body>
