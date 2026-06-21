@@ -42,9 +42,9 @@
     #notice.hidden { display: none; }
     #notice.error { border-color: #c0392b; }
     #noticeMsg { margin: 0; color: var(--fg); }
-    #decoderRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
-    #decoderRow.hidden { display: none; }
-    button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 6px 12px; font-size: 13px; }
+    #appFooter { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    #buildStamp { width: 100%; margin-top: 8px; opacity: .8; }
   </style>
 </head>
 <body>
@@ -60,10 +60,6 @@
 
     <div id="notice" class="hidden">
       <p id="noticeMsg" class="meta"></p>
-      <div id="decoderRow" class="hidden">
-        <button id="universalBtn" class="secondary" type="button">Enable universal decoder</button>
-        <span class="meta">Downloads ~30&nbsp;MB once and runs locally — your video is still never uploaded.</span>
-      </div>
     </div>
 
     <section id="controls" class="panel hidden">
@@ -98,6 +94,13 @@
     </section>
 
     <div id="grid"></div>
+
+    <footer id="appFooter">
+      <span id="universalState" class="meta">Unusual format (HEVC, ProRes, AVI…) or "no decodable dimensions"? </span>
+      <button id="universalBtn" class="secondary" type="button">Enable universal decoder</button>
+      <span class="meta">— downloads ~30&nbsp;MB once, runs locally, never uploads your video.</span>
+      <div id="buildStamp" class="meta"></div>
+    </footer>
   </main>
 
   <!-- JSZip 3.10.1 (https://stuk.github.io/jszip/) inlined for zero-network, offline operation. MIT/GPLv3. -->
@@ -125,8 +128,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const videoMeta = $("videoMeta"), status = $("status"), grid = $("grid");
     const intervalEl = $("interval"), formatEl = $("format"), qualityEl = $("quality"),
           maxFramesEl = $("maxFrames"), extractBtn = $("extractBtn"), progress = $("progress");
-    const notice = $("notice"), noticeMsg = $("noticeMsg"), decoderRow = $("decoderRow"),
-          universalBtn = $("universalBtn");
+    const notice = $("notice"), noticeMsg = $("noticeMsg"),
+          universalBtn = $("universalBtn"), universalState = $("universalState"), buildStamp = $("buildStamp");
+
+    const BUILD = "v0.4 · 2026-06-21 · codec diagnostics + universal decoder";
+    if (buildStamp) buildStamp.textContent = "Build: " + BUILD;
 
     const video = document.createElement("video");
     video.muted = true; video.playsInline = true; video.preload = "auto";
@@ -146,7 +152,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       notice.classList.toggle("error", !!isError);
       notice.classList.toggle("hidden", !msg);
     }
-    function clearNotice() { notify(""); decoderRow.classList.add("hidden"); }
+    function clearNotice() { notify(""); }
 
     // Recognized video file extensions — used when the OS doesn't report a MIME
     // type (drag-drop of e.g. .mov can arrive with an empty file.type).
@@ -315,9 +321,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         msg += " The universal decoder also couldn't produce a playable file.";
         notify(msg, true);
       } else {
-        msg += " Enable the universal decoder below, or " + reencode + ", or try Chrome/Safari.";
+        msg += " Use “Enable universal decoder” at the bottom of the page, or " + reencode + ", or try Chrome/Safari.";
         notify(msg, true);
-        decoderRow.classList.remove("hidden");
+        universalBtn.focus();
       }
     }
 
@@ -391,7 +397,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
              (fromFile ? " This needs a network connection the first time." : ""));
       try {
         await ensureFFmpeg();
-        decoderRow.classList.add("hidden");
+        universalState.textContent = "Universal decoder ready. ";
         if (currentFile) { triedTranscode = true; await transcodeAndPlay(currentFile); }
         else notify("Universal decoder ready. Load a video to decode it.");
       } catch (e) {
