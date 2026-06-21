@@ -177,13 +177,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       playSrc(currentURL);   // try the browser's native decoder first
     }
 
-    video.addEventListener("loadedmetadata", () => {
+    function onVideoReady() {
       loaded = true;
       clearNotice();
       controls.classList.remove("hidden");
       dropzone.classList.add("hidden");
       updateMeta();
       setStatus("Ready.");
+    }
+
+    video.addEventListener("loadedmetadata", () => {
+      if (video.videoWidth && video.videoHeight) { onVideoReady(); return; }
+      // Some browsers (notably Firefox with an unsupported video codec) "load"
+      // the file as 0x0 instead of firing 'error'. Give dimensions a brief
+      // moment to arrive, then treat a still-0x0 result as a decode failure
+      // so the diagnostics + universal-decoder option appear.
+      let settled = false;
+      const onData = () => {
+        if (settled || !(video.videoWidth && video.videoHeight)) return;
+        settled = true; video.removeEventListener("loadeddata", onData); onVideoReady();
+      };
+      video.addEventListener("loadeddata", onData);
+      setTimeout(() => {
+        if (settled) return;
+        settled = true; video.removeEventListener("loadeddata", onData);
+        if (video.videoWidth && video.videoHeight) onVideoReady();
+        else handleDecodeFailure();   // 0x0 => no decodable video track
+      }, 800);
     });
     video.addEventListener("error", () => { handleDecodeFailure(); });
 
