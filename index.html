@@ -124,6 +124,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function loadFile(file) {
       if (!file) return;
       if (!file.type.startsWith("video/")) { setStatus("Not a video file: " + (file.type || "unknown")); return; }
+      cancelRequested = true;   // stop any in-flight run
+      running = false; extractBtn.textContent = "Extract frames"; progress.hidden = true;
       if (currentURL) URL.revokeObjectURL(currentURL);
       currentURL = URL.createObjectURL(file);   // <-- local only, no upload
       loaded = false;
@@ -184,6 +186,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     async function captureFrameAt(t, mime, quality) {
+      if (!video.videoWidth || !video.videoHeight) throw new Error("Video has no decodable dimensions");
       await seekTo(t);
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;     // original resolution
@@ -215,6 +218,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
       const width = String(times.length).length;
       const frames = [];
+
+      if (times.length > 500) {
+        const ok = confirm(
+          `This will capture ${times.length} frames at full resolution and hold them in memory ` +
+          `before zipping. On long videos this can crash the tab. Continue?\n\n` +
+          `Tip: increase the interval, lower "Max frames", or use JPEG to reduce memory.`);
+        if (!ok) { setStatus("Cancelled."); progress.hidden = true; return []; }
+      }
+      if (mime === "image/png" && video.videoWidth * video.videoHeight > 1920 * 1080 && times.length > 100) {
+        setStatus("Tip: PNG at this resolution/count uses a lot of memory — JPEG is recommended.");
+      }
 
       cancelRequested = false;
       grid.innerHTML = "";
