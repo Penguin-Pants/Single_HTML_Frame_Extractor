@@ -35,8 +35,15 @@
     button:disabled { opacity: .5; cursor: not-allowed; }
     progress { width: 100%; height: 14px; }
     #status { color: var(--muted); min-height: 1.2em; margin-top: 8px; }
-    #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap: 8px; margin-top: 16px; }
-    #grid img { width: 100%; border-radius: 6px; border: 1px solid var(--border); }
+    #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-top: 16px; }
+    .card { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); display: flex; flex-direction: column; }
+    .card img { width: 100%; display: block; }
+    .card .pick { position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+    .card .cap { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; font-size: 11px; color: var(--muted); }
+    .card .cap span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card .dl { padding: 3px 8px; font-size: 11px; font-weight: 600; }
+    #results.hidden { display: none; }
+    #results .row { gap: 10px; align-items: center; }
     .meta { color: var(--muted); font-size: 13px; }
     #notice { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
     #notice.hidden { display: none; }
@@ -93,6 +100,15 @@
       <div id="status"></div>
     </section>
 
+    <section id="results" class="panel hidden">
+      <div class="row">
+        <button id="selectAllBtn" class="secondary" type="button">Select none</button>
+        <button id="downloadSelBtn" type="button">Download selected</button>
+        <button id="downloadZipBtn" class="secondary" type="button">Download all as ZIP</button>
+        <span id="resultsInfo" class="meta"></span>
+      </div>
+    </section>
+
     <div id="grid"></div>
 
     <footer id="appFooter">
@@ -130,8 +146,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           maxFramesEl = $("maxFrames"), extractBtn = $("extractBtn"), progress = $("progress");
     const notice = $("notice"), noticeMsg = $("noticeMsg"),
           universalBtn = $("universalBtn"), universalState = $("universalState"), buildStamp = $("buildStamp");
+    const results = $("results"), selectAllBtn = $("selectAllBtn"), downloadSelBtn = $("downloadSelBtn"),
+          downloadZipBtn = $("downloadZipBtn"), resultsInfo = $("resultsInfo");
 
-    const BUILD = "v0.4 · 2026-06-21 · codec diagnostics + universal decoder";
+    const BUILD = "v0.5 · 2026-06-21 · per-frame downloads (pick what to save)";
     if (buildStamp) buildStamp.textContent = "Build: " + BUILD;
 
     const video = document.createElement("video");
@@ -143,6 +161,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let running = false;
     let cancelRequested = false;
     let triedTranscode = false;   // guards against re-transcoding the same file
+    let extractedFrames = [];     // [{ name, blob, url, checkbox }] from the last run
 
     function setStatus(msg) { status.textContent = msg; }
     // Visible message area that works even before the controls panel is shown
@@ -179,7 +198,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       notify("Loading video…");
       controls.classList.add("hidden");
       dropzone.classList.remove("hidden");
-      grid.innerHTML = "";
+      clearFrames();
       playSrc(currentURL);   // try the browser's native decoder first
     }
 
@@ -483,8 +502,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       if (times.length > 500) {
         const ok = confirm(
-          `This will capture ${times.length} frames at full resolution and hold them in memory ` +
-          `before zipping. On long videos this can crash the tab. Continue?\n\n` +
+          `This will capture ${times.length} frames at full resolution and hold them in memory. ` +
+          `On long videos this can crash the tab. Continue?\n\n` +
           `Tip: increase the interval, lower "Max frames", or use JPEG to reduce memory.`);
         if (!ok) { setStatus("Cancelled."); progress.hidden = true; return []; }
       }
@@ -493,26 +512,69 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       cancelRequested = false;
-      grid.innerHTML = "";
+      clearFrames();
       progress.hidden = false; progress.value = 0; progress.max = times.length;
 
       for (let i = 0; i < times.length; i++) {
         if (cancelRequested) { setStatus(`Cancelled at ${i} / ${times.length}`); break; }
         const blob = await captureFrameAt(times[i], mime, quality);
         const name = `frame_${pad(i + 1, width)}_${times[i].toFixed(2)}s.${ext}`;
-        frames.push({ name, blob });
-
-        const img = document.createElement("img");
-        img.src = URL.createObjectURL(blob);
-        img.title = name;
-        grid.appendChild(img);
+        const frame = { name, blob, url: URL.createObjectURL(blob), checkbox: null };
+        renderFrameCard(frame);       // thumbnail + checkbox + per-frame Download
+        extractedFrames.push(frame);
 
         progress.value = i + 1;
         setStatus(`Captured ${i + 1} / ${times.length}`);
-        // yield so the UI can paint
+        // yield so the UI can paint (frames appear live as they're captured)
         await new Promise((r) => setTimeout(r, 0));
       }
-      return frames;
+      return extractedFrames;
+    }
+
+    // Build one thumbnail card with a select checkbox and its own download button.
+    function renderFrameCard(frame) {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const pick = document.createElement("input");
+      pick.type = "checkbox"; pick.className = "pick"; pick.checked = true;
+      pick.setAttribute("aria-label", "Select " + frame.name);
+      pick.addEventListener("change", updateResultsInfo);
+      frame.checkbox = pick;
+
+      const img = document.createElement("img");
+      img.src = frame.url; img.title = frame.name; img.alt = frame.name;
+
+      const cap = document.createElement("div");
+      cap.className = "cap";
+      const label = document.createElement("span");
+      label.textContent = frame.name;
+      const dl = document.createElement("button");
+      dl.className = "dl"; dl.type = "button"; dl.textContent = "Download";
+      dl.addEventListener("click", () => {
+        downloadBlob(frame.blob, frame.name);
+        setStatus("Downloaded " + frame.name);
+      });
+      cap.appendChild(label); cap.appendChild(dl);
+
+      card.appendChild(pick); card.appendChild(img); card.appendChild(cap);
+      grid.appendChild(card);
+    }
+
+    function clearFrames() {
+      for (const f of extractedFrames) if (f.url) URL.revokeObjectURL(f.url);
+      extractedFrames = [];
+      grid.innerHTML = "";
+      results.classList.add("hidden");
+    }
+
+    function selectedFrames() { return extractedFrames.filter((f) => f.checkbox && f.checkbox.checked); }
+
+    function updateResultsInfo() {
+      const sel = selectedFrames().length, total = extractedFrames.length;
+      resultsInfo.textContent = `${sel} of ${total} selected`;
+      selectAllBtn.textContent = sel === total && total > 0 ? "Select none" : "Select all";
+      downloadSelBtn.disabled = sel === 0;
     }
 
     // --- zip + download (inline JSZip, no FileSaver/CDN) ---
@@ -524,7 +586,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    async function zipAndDownload(frames) {
+    async function zipFrames(frames, filename) {
       if (!frames.length) return;
       setStatus("Building zip…");
       const zip = new JSZip();
@@ -533,17 +595,38 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         { type: "blob", compression: "STORE" },   // images are already compressed; STORE is fast
         (meta) => setStatus(`Zipping… ${meta.percent.toFixed(0)}%`)
       );
-      downloadBlob(blob, "frames.zip");
-      setStatus(`Done. ${frames.length} frames → frames.zip (${(blob.size/1048576).toFixed(1)} MB)`);
+      downloadBlob(blob, filename);
+      setStatus(`${frames.length} frames → ${filename} (${(blob.size/1048576).toFixed(1)} MB)`);
     }
+
+    // --- download controls (per-frame, selected, or all) ---
+    downloadZipBtn.addEventListener("click", () => {
+      if (extractedFrames.length) zipFrames(extractedFrames, "frames.zip");
+    });
+    downloadSelBtn.addEventListener("click", () => {
+      const sel = selectedFrames();
+      if (!sel.length) { setStatus("No frames selected."); return; }
+      if (sel.length === 1) { downloadBlob(sel[0].blob, sel[0].name); setStatus("Downloaded " + sel[0].name); return; }
+      zipFrames(sel, "frames_selected.zip");
+    });
+    selectAllBtn.addEventListener("click", () => {
+      const selectAll = selectedFrames().length !== extractedFrames.length;
+      for (const f of extractedFrames) if (f.checkbox) f.checkbox.checked = selectAll;
+      updateResultsInfo();
+    });
 
     extractBtn.addEventListener("click", async () => {
       if (!loaded) return;
       if (running) { cancelRequested = true; return; }
       running = true; extractBtn.textContent = "Cancel";
+      results.classList.add("hidden");
       try {
         const frames = await extractAll();
-        if (frames.length) await zipAndDownload(frames);
+        if (frames.length) {
+          results.classList.remove("hidden");
+          updateResultsInfo();
+          setStatus(`Done. ${frames.length} frames ready — download individually, or use the buttons above.`);
+        }
       } catch (err) {
         setStatus("Error: " + err.message);
       } finally {

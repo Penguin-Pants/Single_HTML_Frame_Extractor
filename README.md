@@ -15,10 +15,15 @@ Extract individual frames from a video — entirely in your browser. One `index.
 4. The Network tab stays empty (or shows only the local `index.html`). Nothing leaves your machine.
 
 ## How it works
-Hidden `<video>` → seek to each timestamp → wait for `seeked` + two animation frames → `drawImage` onto a `<canvas>` at the video's original resolution → `canvas.toBlob` → zip in-memory with JSZip → download via a generated link.
+Hidden `<video>` → seek to each timestamp → wait for `seeked` + two animation frames → `drawImage` onto a `<canvas>` at the video's original resolution → `canvas.toBlob`. Each frame is shown as a thumbnail immediately and kept in memory so you can download it individually, or zip a selection / all of them in-memory with JSZip and save via a generated link.
 
 ## Usage
-Open `index.html`, drop in a video, set the interval/format, click **Extract frames**. A `frames.zip` downloads.
+Open `index.html`, drop in a video, set the interval/format, click **Extract frames**. Thumbnails appear live as each frame is captured. When it finishes you can:
+- **Download** any single frame with the button on its thumbnail,
+- tick the checkboxes and **Download selected** (one file if you pick one, a `frames_selected.zip` if you pick several),
+- or **Download all as ZIP** (`frames.zip`).
+
+Nothing downloads automatically — you choose what to save.
 
 ## Video format & codec support
 The container (`.mp4`, `.mov`, `.webm`, …) barely matters — the **codec inside** is what counts, and the default path can only decode what your browser's `<video>` element supports:
