@@ -121,9 +121,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function setStatus(msg) { status.textContent = msg; }
 
+    // Recognized video file extensions — used when the OS doesn't report a MIME
+    // type (drag-drop of e.g. .mov can arrive with an empty file.type).
+    const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|avi|ogv|ogg|3gp|3g2|mts|m2ts|ts|mpg|mpeg|wmv|flv|qt)$/i;
+    function looksLikeVideo(file) {
+      return file.type.startsWith("video/") || VIDEO_EXT.test(file.name || "");
+    }
+
     function loadFile(file) {
       if (!file) return;
-      if (!file.type.startsWith("video/")) { setStatus("Not a video file: " + (file.type || "unknown")); return; }
+      if (!looksLikeVideo(file)) { setStatus("Not a video file: " + (file.type || file.name || "unknown")); return; }
       cancelRequested = true;   // stop any in-flight run
       running = false; extractBtn.textContent = "Extract frames"; progress.hidden = true;
       if (currentURL) URL.revokeObjectURL(currentURL);
