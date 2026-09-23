@@ -20,7 +20,7 @@ Hidden `<video>` → seek to each timestamp → wait for `seeked` + two animatio
 ## Usage
 Open `index.html`, drop in a video, set the interval/format, click **Extract frames**. Thumbnails appear live as each frame is captured. When it finishes you can:
 - **Download** any single frame with the button on its thumbnail,
-- tick the checkboxes and **Download selected** (one file if you pick one, a `frames_selected.zip` if you pick several),
+- click the thumbnails (or their checkboxes) to select frames, then **Download selected** (one file if you pick one, a `frames_selected.zip` if you pick several),
 - or **Download all as ZIP** (`frames.zip`).
 
 Nothing downloads automatically — you choose what to save.
