@@ -36,12 +36,15 @@
     progress { width: 100%; height: 14px; }
     #status { color: var(--muted); min-height: 1.2em; margin-top: 8px; }
     #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-top: 16px; }
-    .card { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); display: flex; flex-direction: column; }
-    .card img { width: 100%; display: block; }
-    .card .pick { position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+    .card { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); display: flex; flex-direction: column; cursor: pointer; scroll-margin-top: 110px; }
+    .card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+    .card img { width: 100%; height: auto; display: block; transition: opacity .15s; }
+    .card:not(.selected) img { opacity: .55; }
+    .card .pick { position: absolute; z-index: 1; top: 6px; left: 6px; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
     .card .cap { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; font-size: 11px; color: var(--muted); }
     .card .cap span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .card .dl { padding: 3px 8px; font-size: 11px; font-weight: 600; }
+    #results { position: sticky; top: 0; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
     #results.hidden { display: none; }
     #results .row { gap: 10px; align-items: center; }
     .meta { color: var(--muted); font-size: 13px; }
@@ -149,7 +152,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const results = $("results"), selectAllBtn = $("selectAllBtn"), downloadSelBtn = $("downloadSelBtn"),
           downloadZipBtn = $("downloadZipBtn"), resultsInfo = $("resultsInfo");
 
-    const BUILD = "v0.5 · 2026-06-21 · per-frame downloads (pick what to save)";
+    const BUILD = "v0.7 · 2026-09-23 · frame file names start with the video name";
     if (buildStamp) buildStamp.textContent = "Build: " + BUILD;
 
     const video = document.createElement("video");
@@ -161,7 +164,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let running = false;
     let cancelRequested = false;
     let triedTranscode = false;   // guards against re-transcoding the same file
-    let extractedFrames = [];     // [{ name, blob, url, checkbox }] from the last run
+    let extractedFrames = [];     // [{ name, blob, url, checkbox, card }] from the last run
 
     function setStatus(msg) { status.textContent = msg; }
     // Visible message area that works even before the controls panel is shown
@@ -493,11 +496,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function pad(n, width) { return String(n).padStart(width, "0"); }
 
+    // "Videotest.mov" -> "Videotest_"; strips the extension and characters
+    // that are not allowed in file names on common systems.
+    function framePrefix() {
+      const base = ((currentFile && currentFile.name) || "")
+        .replace(/\.[^.]*$/, "").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").trim();
+      return base ? base + "_" : "";
+    }
+
     async function extractAll() {
       const times = planTimestamps();
       const mime = formatEl.value, quality = parseFloat(qualityEl.value);
       const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
       const width = String(times.length).length;
+      const prefix = framePrefix();
       const frames = [];
 
       if (times.length > 500) {
@@ -518,10 +530,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       for (let i = 0; i < times.length; i++) {
         if (cancelRequested) { setStatus(`Cancelled at ${i} / ${times.length}`); break; }
         const blob = await captureFrameAt(times[i], mime, quality);
-        const name = `frame_${pad(i + 1, width)}_${times[i].toFixed(2)}s.${ext}`;
+        const name = `${prefix}frame_${pad(i + 1, width)}_${times[i].toFixed(2)}s.${ext}`;
         const frame = { name, blob, url: URL.createObjectURL(blob), checkbox: null };
-        renderFrameCard(frame);       // thumbnail + checkbox + per-frame Download
+        // follow new frames only while the latest frame is on screen,
+        // so scrolling up to look at earlier frames is not interrupted
+        const follow = i === 0 || lastCardVisible();
+        const card = renderFrameCard(frame);   // thumbnail + checkbox + per-frame Download
         extractedFrames.push(frame);
+        if (follow) card.scrollIntoView({ block: "end" });
 
         progress.value = i + 1;
         setStatus(`Captured ${i + 1} / ${times.length}`);
@@ -531,19 +547,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return extractedFrames;
     }
 
+    function lastCardVisible() {
+      const last = grid.lastElementChild;
+      if (!last) return true;
+      const r = last.getBoundingClientRect();
+      return r.top < window.innerHeight && r.bottom > 0;
+    }
+
     // Build one thumbnail card with a select checkbox and its own download button.
+    // Clicking anywhere on the card (except the buttons) toggles its selection.
     function renderFrameCard(frame) {
       const card = document.createElement("div");
-      card.className = "card";
+      card.className = "card selected";
 
       const pick = document.createElement("input");
       pick.type = "checkbox"; pick.className = "pick"; pick.checked = true;
       pick.setAttribute("aria-label", "Select " + frame.name);
-      pick.addEventListener("change", updateResultsInfo);
+      pick.addEventListener("change", () => { syncCard(frame); updateResultsInfo(); });
       frame.checkbox = pick;
+      frame.card = card;
+
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("button") || e.target === pick) return;
+        pick.checked = !pick.checked;
+        syncCard(frame); updateResultsInfo();
+      });
 
       const img = document.createElement("img");
       img.src = frame.url; img.title = frame.name; img.alt = frame.name;
+      // reserve the image height now so auto-scroll lands correctly before it loads
+      img.width = video.videoWidth; img.height = video.videoHeight;
 
       const cap = document.createElement("div");
       cap.className = "cap";
@@ -559,6 +592,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       card.appendChild(pick); card.appendChild(img); card.appendChild(cap);
       grid.appendChild(card);
+      return card;
+    }
+
+    function syncCard(frame) {
+      if (frame.card) frame.card.classList.toggle("selected", frame.checkbox.checked);
     }
 
     function clearFrames() {
@@ -611,7 +649,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     selectAllBtn.addEventListener("click", () => {
       const selectAll = selectedFrames().length !== extractedFrames.length;
-      for (const f of extractedFrames) if (f.checkbox) f.checkbox.checked = selectAll;
+      for (const f of extractedFrames) if (f.checkbox) { f.checkbox.checked = selectAll; syncCard(f); }
       updateResultsInfo();
     });
 
