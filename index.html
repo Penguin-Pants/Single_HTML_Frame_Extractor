@@ -152,7 +152,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const results = $("results"), selectAllBtn = $("selectAllBtn"), downloadSelBtn = $("downloadSelBtn"),
           downloadZipBtn = $("downloadZipBtn"), resultsInfo = $("resultsInfo");
 
-    const BUILD = "v0.6 · 2026-09-23 · sticky download bar, auto-scroll, click thumbnail to select";
+    const BUILD = "v0.7 · 2026-09-23 · frame file names start with the video name";
     if (buildStamp) buildStamp.textContent = "Build: " + BUILD;
 
     const video = document.createElement("video");
@@ -496,11 +496,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function pad(n, width) { return String(n).padStart(width, "0"); }
 
+    // "Videotest.mov" -> "Videotest_"; strips the extension and characters
+    // that are not allowed in file names on common systems.
+    function framePrefix() {
+      const base = ((currentFile && currentFile.name) || "")
+        .replace(/\.[^.]*$/, "").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").trim();
+      return base ? base + "_" : "";
+    }
+
     async function extractAll() {
       const times = planTimestamps();
       const mime = formatEl.value, quality = parseFloat(qualityEl.value);
       const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
       const width = String(times.length).length;
+      const prefix = framePrefix();
       const frames = [];
 
       if (times.length > 500) {
@@ -521,7 +530,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       for (let i = 0; i < times.length; i++) {
         if (cancelRequested) { setStatus(`Cancelled at ${i} / ${times.length}`); break; }
         const blob = await captureFrameAt(times[i], mime, quality);
-        const name = `frame_${pad(i + 1, width)}_${times[i].toFixed(2)}s.${ext}`;
+        const name = `${prefix}frame_${pad(i + 1, width)}_${times[i].toFixed(2)}s.${ext}`;
         const frame = { name, blob, url: URL.createObjectURL(blob), checkbox: null };
         // follow new frames only while the latest frame is on screen,
         // so scrolling up to look at earlier frames is not interrupted

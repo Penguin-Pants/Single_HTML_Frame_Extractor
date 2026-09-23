@@ -23,6 +23,8 @@ Open `index.html`, drop in a video, set the interval/format, click **Extract fra
 - click the thumbnails (or their checkboxes) to select frames, then **Download selected** (one file if you pick one, a `frames_selected.zip` if you pick several),
 - or **Download all as ZIP** (`frames.zip`).
 
+Frame files are named after the video, for example `Videotest.mov` gives `Videotest_frame_001_0.00s.jpg`.
+
 Nothing downloads automatically — you choose what to save.
 
 ## Video format & codec support
