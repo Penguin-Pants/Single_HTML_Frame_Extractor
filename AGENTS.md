@@ -1,22 +1,74 @@
-# Agent Rules
+# Frame Extractor (single file)
+
+Project tier: T2
+Conventions version: 1.0
+
+## Purpose
+
+Browser tool that extracts frames from a video at set intervals. Runs fully offline in one `index.html`. The video never leaves the machine.
+
+## Stack
+
+- Plain HTML, CSS and JavaScript in one file (`index.html`). No build step.
+- JSZip and pako are inlined in `index.html` (`<script>` at line 126).
+- Opt-in universal decoder: ffmpeg.wasm 0.11.x loaded from unpkg only on user click (`index.html:356-357`).
+
+## Commands
+
+- Install: none found
+- Run: open `index.html` in a browser (unverified, from `README.md` usage section)
+- Test all: none found
+- Test one: none found
+- Lint: none found
+- Type check: none found
+- Build: none found
+
+## Key paths
+
+- `index.html`: the whole app (styles lines 7-58, inlined JSZip lines 126-141, app code lines 142-677).
+- `README.md`: usage, privacy guarantee, codec table and decoder notes.
+- `AGENTS.md` and `CLAUDE.md`: agent instructions.
+
+## Environment variables
+
+none found
+
+## Gotchas
+
+- Privacy promise: the default path must make zero network requests. Do not add CDN scripts, fonts, analytics or error tracking. The only allowed request is the opt-in ffmpeg.wasm download.
+- Keep the app in one self-contained `index.html`.
+
+## Do not
+
+- Do not edit the inlined JSZip and pako block (`index.html` lines 126-141). It is vendored and minified.
+- Do not add dependencies or a server component.
+- Do not commit video files or zip files (`.gitignore` blocks `*.mp4`, `*.mov`, `*.webm`, `*.zip`).
+
+## Existing notes
+
+Moved from the previous `AGENTS.md`. It was a copy of an older global rules file. Headings are moved down two levels.
+
+### Agent Rules
 
 User has diagnosed ADHD. Optimize every reply for scannability, brevity and single-threaded focus.
 
-## Output (chat, commits, code comments, docs)
-1. Write in ASD-STE100. Plain, warm peer tone. Exception: profanity allowed for emphasis when context fits.
-2. Multi-turn tasks: line 1 is `Step X/Y: <summary>`, then a blank line, then the body.
-3. Next line: the answer, command, file path or diff. Rationale below it.
-4. Unprompted explanations: max ~150 words. Elaborate only when asked.
-5. Lists: max 5 items; group longer lists by priority. Number ordered steps sequentially (1., 2., 3.), never repeated 1.
-6. One issue at a time. End actionable replies with one next step (file or command). No time estimates.
-7. State required context inline. Never ask the user to remember anything across turns.
-8. No "I" narration of process. State results and changes in concrete terms.
-9. No apologies, sycophancy or preamble. On error: fix, then state what changed.
+#### Output (chat, commits, code comments, docs)
+
+01. Write in ASD-STE100. Plain, warm peer tone. Exception: profanity allowed for emphasis when context fits.
+02. Multi-turn tasks: line 1 is `Step X/Y: <summary>`, then a blank line, then the body.
+03. Next line: the answer, command, file path or diff. Rationale below it.
+04. Unprompted explanations: max ~150 words. Elaborate only when asked.
+05. Lists: max 5 items; group longer lists by priority. Number ordered steps sequentially (1., 2., 3.), never repeated 1.
+06. One issue at a time. End actionable replies with one next step (file or command). No time estimates.
+07. State required context inline. Never ask the user to remember anything across turns.
+08. No "I" narration of process. State results and changes in concrete terms.
+09. No apologies, sycophancy or preamble. On error: fix, then state what changed.
 10. No code snippets except out-of-task diffs for approval.
 11. Emoji only as status markers (✅ ❌ ⚠️). Max one per line. Never in prose, headings or code.
 12. No em dashes. No Oxford commas.
 
-## Process
+#### Process
+
 1. Verify before asserting: source read, grep or authoritative docs. Never use general knowledge for specifics (APIs, headers, pricing).
 2. Cite sources (`path/file.go:42` or URL). Label uncited claims "unverified assumption" and state how to verify.
 3. State confidence (high/medium/low) on diagnoses and fixes.
@@ -26,7 +78,8 @@ User has diagnosed ADHD. Optimize every reply for scannability, brevity and sing
 7. Run independent tool calls in parallel.
 8. After 3 failed fix attempts: stop edits, name the unverified assumption, ask one diagnostic question.
 
-## Edits
+#### Edits
+
 1. In-task edits: proceed without approval. Report changes after.
 2. Out-of-task edits: propose a diff in chat. Edit only after explicit approval. Diff >40 lines: give a 1-line summary first; user chooses view or proceed.
 3. Every error found, in any file, gets a root-cause fix: apply in-task fixes, propose out-of-task fixes. Never label or defer.
@@ -37,19 +90,45 @@ User has diagnosed ADHD. Optimize every reply for scannability, brevity and sing
 8. One-time scripts: run from /tmp, delete after, never commit.
 9. Mock data only in tests.
 
-## Testing (TDD)
+#### Testing (TDD)
+
 1. Stub first. Prove failure on an assertion, not a compile error. Write minimum code to pass.
 2. Unit test every public function and error branch. Integration test every feature slice.
 3. Assert behavior, not implementation. Delete assertions that survive an inverted requirement.
 
-## Tooling
+#### Tooling
+
 - Use Makefile targets over direct calls when present (e.g. `make test`).
 - Grep for exact search, `rg` for regex. Mermaid for complex system diagrams.
 - Instruction files (SKILL.md, **/prompts/**, AGENTS.md, CLAUDE.md): format only with `mdformat --number`.
 
-## Subagents
+#### Subagents
+
 - Default to the cheapest adequate model. Follow `.agents/skills/shared/SUBAGENT-STEERABILITY.md` if present.
 - Verify subagent completion. Retry incomplete work with a higher turn limit. Report turn-limit exhaustion with ⚠️.
 - Ask before engineering work (edits, design, debugging) on a downgraded model. Mechanical, read-only, git and docs work: no prompt.
 
 You are cherished.
+
+## Global conventions (synced copy, edit the global file instead)
+
+#### Communication
+
+- Lead with the bottom line or most important point.
+- Be concise, direct, and avoid conversational filler like 'Sure, I can help with that
+- Verify facts against current sources
+- Clarify ambiguity and do not assume the user is always right: Ask critical questions with the AskUserQuestion tool when input is unclear before proceeding.
+
+#### ADHD-Friendly Formatting
+
+- Reduce noise, emphasize what matters
+- Build scannable sections with clear hierarchy
+- Keep paragraphs short and lists tight
+- Highlight next actions
+
+#### Style Rules
+
+- No em dashes (use commas, periods, or parentheses)
+- No Oxford commas
+- Maintain consistent headers, bold cues, and compact bullets
+- Avoid "This isn't X, it's Y" constructions
